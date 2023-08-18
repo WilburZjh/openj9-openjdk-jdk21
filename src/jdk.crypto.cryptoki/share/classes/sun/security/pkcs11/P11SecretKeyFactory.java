@@ -361,6 +361,7 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
     static P11Key.P11PBEKey derivePBEKey(Token token, PBEKeySpec keySpec,
             PBEKeyInfo pbeKi) throws InvalidKeySpecException {
         token.ensureValid();
+        System.out.println("P11SecretKeyFactory -> derivePBEKey");
         if (keySpec == null) {
             throw new InvalidKeySpecException("PBEKeySpec must not be null");
         }
@@ -368,12 +369,15 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
         char[] password = null;
         char[] encPassword = null;
         try {
+            System.out.println("P11SecretKeyFactory -> derivePBEKey -> try");
             session = token.getObjSession();
             CK_MECHANISM ckMech;
             password = keySpec.getPassword();
+            System.out.println("P11SecretKeyFactory -> derivePBEKey -> try -> password is: " + new String(password));
             byte[] salt = keySpec.getSalt();
             int itCount = keySpec.getIterationCount();
             int keySize = keySpec.getKeyLength();
+            System.out.println("P11SecretKeyFactory -> derivePBEKey -> try -> keySize is: " + keySize);
             assert password != null :
                     "PBEKeySpec does not allow a null password";
             if (salt == null) {
@@ -384,7 +388,9 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
                 throw new InvalidKeySpecException("Iteration count must be " +
                         "a non-zero positive integer");
             }
+            System.out.println("P11SecretKeyFactory -> derivePBEKey -> try -> pbeKi.keyLen is: " + pbeKi.keyLen + ", and pbeKi.algo is: " + pbeKi.algo);
             if (pbeKi.keyLen > 0) {
+                System.out.println("P11SecretKeyFactory -> derivePBEKey -> try -> pbeKi.keyLen > 0");
                 if (keySize == 0) {
                     keySize = pbeKi.keyLen;
                 } else if (keySize != pbeKi.keyLen) {
@@ -400,16 +406,20 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
             }
 
             if (pbeKi.kdfMech == CKM_PKCS5_PBKD2) {
+                System.out.println("P11SecretKeyFactory -> derivePBEKey -> try -> pbeKi.kdfMech == CKM_PKCS5_PBKD2");
                 encPassword = P11Util.encodePassword(password,
                         StandardCharsets.UTF_8, 0);
+                System.out.println("P11SecretKeyFactory -> derivePBEKey -> try -> pbeKi.kdfMech == CKM_PKCS5_PBKD2 -> encPassword is: " + new String(encPassword));
                 CK_VERSION p11Ver = token.p11.getVersion();
                 if (P11Util.isNSS(token) || p11Ver.major < 2 ||
                         p11Ver.major == 2 && p11Ver.minor < 40) {
                     // NSS keeps using the old structure beyond PKCS #11 v2.40.
+                    System.out.println("P11SecretKeyFactory -> derivePBEKey -> try -> pbeKi.kdfMech == CKM_PKCS5_PBKD2 -> old NSS version.");
                     ckMech = new CK_MECHANISM(pbeKi.kdfMech,
                             new CK_PKCS5_PBKD2_PARAMS(encPassword, salt,
                                     itCount, pbeKi.prfMech));
                 } else {
+                    System.out.println("P11SecretKeyFactory -> derivePBEKey -> try -> pbeKi.kdfMech == CKM_PKCS5_PBKD2 -> new NSS version.");
                     ckMech = new CK_MECHANISM(pbeKi.kdfMech,
                             new CK_PKCS5_PBKD2_PARAMS2(encPassword, salt,
                                     itCount, pbeKi.prfMech));
@@ -423,8 +433,10 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
                  * RFC 7292 Appendix B.1 indicates that the password has to be
                  * encoded as a BMPString with a 2-bytes NULL terminator.
                  */
+                System.out.println("P11SecretKeyFactory -> derivePBEKey -> try -> pbeKi.kdfMech != CKM_PKCS5_PBKD2");
                 encPassword = P11Util.encodePassword(password,
                         StandardCharsets.UTF_16BE, 2);
+                System.out.println("P11SecretKeyFactory -> derivePBEKey -> try -> pbeKi.kdfMech == CKM_PKCS5_PBKD2 -> encPassword is: " + new String(encPassword));
                 ckMech = new CK_MECHANISM(pbeKi.kdfMech,
                         new CK_PBE_PARAMS(encPassword, salt, itCount));
             }
@@ -438,7 +450,9 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
                     pbeKi.extraAttrs.length);
             CK_ATTRIBUTE[] attr = token.getAttributes(
                     O_GENERATE, CKO_SECRET_KEY, pbeKi.keyType, attrs);
+            System.out.println("C_GenerateKey...");
             long keyID = token.p11.C_GenerateKey(session.id(), ckMech, attr);
+            System.out.println("after C_GenerateKey, pbeKi.algo is: " + pbeKi.algo);
             return (P11Key.P11PBEKey) P11Key.pbeKey(session, keyID, pbeKi.algo,
                     keySize, attr, password, salt, itCount);
         } catch (PKCS11Exception e) {
@@ -567,18 +581,23 @@ final class P11SecretKeyFactory extends SecretKeyFactorySpi {
     protected SecretKey engineGenerateSecret(KeySpec keySpec)
             throws InvalidKeySpecException {
         token.ensureValid();
+        System.out.println("P11SecretKeyFactory -> engineGenerateSecret");
         if (keySpec == null) {
             throw new InvalidKeySpecException("KeySpec must not be null");
         }
         if (keySpec instanceof SecretKeySpec secretKeySpec) {
+            System.out.println("P11SecretKeyFactory -> engineGenerateSecret -> keySpec instanceof SecretKeySpec secretKeySpec");
             try {
+                System.out.println("P11SecretKeyFactory -> engineGenerateSecret -> keySpec instanceof SecretKeySpec secretKeySpec -> try");
                 Key key = convertKey(token, secretKeySpec, algorithm);
+                System.out.println("P11SecretKeyFactory -> engineGenerateSecret -> keySpec instanceof SecretKeySpec secretKeySpec -> try -> convertKey");
                 return (SecretKey)key;
             } catch (InvalidKeyException e) {
                 throw new InvalidKeySpecException(e);
             }
         } else if (keySpec instanceof PBEKeySpec pbeKeySpec &&
                 svcPbeKi != null) {
+            System.out.println("P11SecretKeyFactory -> engineGenerateSecret -> keySpec instanceof PBEKeySpec pbeKeySpec && svcPbeKi != null");
             return derivePBEKey(token, pbeKeySpec, svcPbeKi);
         } else if (algorithm.equalsIgnoreCase("DES")) {
             if (keySpec instanceof DESKeySpec desKeySpec) {

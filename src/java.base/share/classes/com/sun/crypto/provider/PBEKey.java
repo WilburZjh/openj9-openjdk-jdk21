@@ -89,6 +89,7 @@ final class PBEKey implements SecretKey {
         // The key is zeroized by finalize()
         // The reachability fence ensures finalize() isn't called early
         byte[] result = key.clone();
+        System.out.println("PBEKey -> getEncoded() -> result is: " + new String(result) + ", the keyLength is: " + result.length);
         Reference.reachabilityFence(this);
         return result;
     }

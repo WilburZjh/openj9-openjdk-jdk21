@@ -43,6 +43,8 @@ import javax.crypto.*;
 import javax.crypto.interfaces.*;
 import javax.crypto.spec.*;
 
+import com.ibm.jvm.dtfjview.Session;
+
 import sun.security.rsa.RSAUtil.KeyType;
 import sun.security.rsa.RSAPublicKeyImpl;
 import sun.security.rsa.RSAPrivateCrtKeyImpl;
@@ -387,6 +389,13 @@ abstract class P11Key implements Key, Length {
             new CK_ATTRIBUTE(CKA_SENSITIVE),
             new CK_ATTRIBUTE(CKA_EXTRACTABLE),
         });
+        System.out.println("P11Key -> pbeKey -> return a P11PBEKey with algorithm: " + algorithm + ", keylength: " + keyLength + ", password: " + new String(password));
+        
+        if (attrs[0].getBoolean() || attrs[1].getBoolean() || (attrs[2].getBoolean() == false)) {
+            System.out.println("A FIPS PBE key");
+            return new P11PBEKeyFIPS(session, keyID, algorithm, keyLength,
+                attrs, password, salt, iterationCount);
+        }
         return new P11PBEKey(session, keyID, algorithm, keyLength,
                 attrs, password, salt, iterationCount);
     }
@@ -534,6 +543,18 @@ abstract class P11Key implements Key, Length {
 
         public String getFormat() {
             token.ensureValid();
+            if (sensitive) {
+                System.out.println("P11SecretKey -> getFormat -> key is sensitive");
+            }
+            if (!extractable) {
+                System.out.println("P11SecretKey -> getFormat -> key is !extractable");
+            }
+            if (isNSS) {
+                System.out.println("P11SecretKey -> getFormat -> key is isNSS");
+            }
+            if (tokenObject) {
+                System.out.println("P11SecretKey -> getFormat -> key is tokenObject");
+            }
             if (sensitive || !extractable || (isNSS && tokenObject)) {
                 return null;
             } else {
@@ -552,9 +573,13 @@ abstract class P11Key implements Key, Length {
                 synchronized (this) {
                     b = encoded;
                     if (b == null) {
+                        System.out.println("P11SecretKey -> getEncodedInternal -> b == null");
                         b = fetchAttributes(new CK_ATTRIBUTE[] {
                                 new CK_ATTRIBUTE(CKA_VALUE),
                         })[0].getByteArray();
+                        if (b == null) {
+                            System.out.println("P11SecretKey -> getEncodedInternal -> after fetchAttributes, b still is null");
+                        }
                         encoded = b;
                     }
                 }
@@ -577,6 +602,51 @@ abstract class P11Key implements Key, Length {
         }
     }
 
+    static final class P11PBEKeyFIPS extends P11SecretKey
+            implements PBEKey {
+        private static final long serialVersionUID = 6847576994253634876L;
+        private char[] password;
+        private final byte[] salt;
+        private final int iterationCount;
+        P11PBEKeyFIPS(Session session, long keyID, String algorithm,
+                int keyLength, CK_ATTRIBUTE[] attributes,
+                char[] password, byte[] salt, int iterationCount) {
+            super(session, keyID, algorithm, keyLength, attributes);
+            this.password = password.clone();
+            this.salt = salt.clone();
+            this.iterationCount = iterationCount;
+        }
+
+        @Override
+        public String getFormat() {
+            return "RAW";
+        }
+
+        @Override
+        public char[] getPassword() {
+            if (password == null) {
+                throw new IllegalStateException("password has been cleared");
+            }
+            System.out.println("P11PBEKeyFIPS getPassword -> " + new String(password));
+            return password.clone();
+        }
+
+        @Override
+        public byte[] getSalt() {
+            return salt.clone();
+        }
+
+        @Override
+        public int getIterationCount() {
+            return iterationCount;
+        }
+
+        void clearPassword() {
+            Arrays.fill(password, '\0');
+            password = null;
+        }
+    }
+
     static final class P11PBEKey extends P11SecretKey
             implements PBEKey {
         private static final long serialVersionUID = 6847576994253634876L;
@@ -591,12 +661,13 @@ abstract class P11Key implements Key, Length {
             this.salt = salt.clone();
             this.iterationCount = iterationCount;
         }
-
+        
         @Override
         public char[] getPassword() {
             if (password == null) {
                 throw new IllegalStateException("password has been cleared");
             }
+            System.out.println("P11PBEKey getPassword -> " + new String(password));
             return password.clone();
         }
 
