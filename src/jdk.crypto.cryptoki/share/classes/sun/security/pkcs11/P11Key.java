@@ -43,8 +43,6 @@ import javax.crypto.*;
 import javax.crypto.interfaces.*;
 import javax.crypto.spec.*;
 
-import com.ibm.jvm.dtfjview.Session;
-
 import sun.security.rsa.RSAUtil.KeyType;
 import sun.security.rsa.RSAPublicKeyImpl;
 import sun.security.rsa.RSAPrivateCrtKeyImpl;
